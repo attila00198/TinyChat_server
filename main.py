@@ -1,9 +1,11 @@
 import asyncio
 import websockets
-from websockets import ServerConnection
 import json
+import logging
+
 from datetime import datetime
 from threading import Thread
+from websockets import ServerConnection
 
 # Konfiguráció
 HOST = "0.0.0.0"
@@ -16,6 +18,22 @@ messages = {}
 
 # Timeout timerek tárolása
 timeout_tasks = {}
+
+###############################
+####    Setup Logging      ####
+###############################
+is_debug_enabled = True
+
+logging.basicConfig(
+    format="%(asctime)s [%(levelname)s]: [%(name)s] %(message)s", datefmt="%I:%M:%S %p"
+)
+
+logger = logging.getLogger("chat_server")
+if is_debug_enabled:
+    logger.level = logging.DEBUG
+else:
+    logger.level = logging.INFO
+
 
 ###############################
 ####   Helper Functions    ####
@@ -71,7 +89,7 @@ async def broadcast(message, exclude=None):
         if client_id != exclude:
             try:
                 await user_data["websocket"].send(json.dumps(message))
-                print(f"[DEBUG]: Elküldve: {message}")
+                logger.debug(f"Elküldve: {message}")
             except:
                 pass
 
@@ -196,16 +214,15 @@ async def process_command(client_id: int, data: dict, websocket: ServerConnectio
     command = parts[0]
     args = parts[1:]
 
-    print(f"[DEBUG]: User of the command: {username}")
-    print(f"[DEBUG]: Command: {command}")
-    print(f"[DEBUG]: Args: {args}")
+    logger.debug(f"User of the command: {username}")
+    logger.debug(f"Command: {command}")
+    logger.debug(f"Args: {args}")
 
     if command in COMMANDS:
-        print(f"[INFO]: Parancs megtalálva: {command}")
         handler = COMMANDS[command]["handler"]
         await handler(username, args, websocket)
     else:
-        print(f"[ERROR]: Ismeretlen parancs: {command}")
+        logger.error(f"Ismeretlen parancs: {command}")
         error_msg = {
             "type": "system",
             "username": "System",
@@ -230,20 +247,20 @@ async def handle_client(websocket):
         "is_timed_out": False,
     }
 
-    print(f"[INFO]: Új kliens csatlakozott. ID: {client_id}")
-    print(f"[INFO]: Aktív userek száma: {len(users)}")
+    logger.info(f"Új kliens csatlakozott. ID: {client_id}")
+    logger.info(f"Aktív userek száma: {len(users)}")
 
     try:
         async for message in websocket:
             try:
                 # JSON üzenet feldolgozása
                 data = json.loads(message)
-                print(f"[DEBUG]: received: ", data)
+                logger.debug(f"received: ", data)
 
                 # Username mentése ha még nincs
                 if "username" in data and users[client_id]["username"] is None:
                     users[client_id]["username"] = data["username"]
-                    print(f"[INFO]: Felhasználónév beállítva: {data['username']}")
+                    logger.info(f"Felhasználónév beállítva: {data['username']}")
 
                     # Frissített user lista küldése MINDENKINEK
                     user_list_message = {
@@ -320,7 +337,7 @@ async def handle_client(websocket):
                 await websocket.send(json.dumps(error_response))
 
     except websockets.exceptions.ConnectionClosed:
-        print(f"[INFO]: Kliens lecsatlakozott: {client_id}")
+        logger.info(f"Kliens lecsatlakozott: {client_id}")
     finally:
         # User törlése a listából
         if client_id in users:
@@ -332,7 +349,7 @@ async def handle_client(websocket):
                 del timeout_tasks[username]
 
             del users[client_id]
-            print(f"[INFO]: Aktív userek száma: {len(users)}")
+            logger.info(f"Aktív felhasználók száma: {len(users)}")
 
             # Frissített user lista küldése mindenkinek
             if len(users) > 0:
@@ -347,8 +364,8 @@ async def handle_client(websocket):
 async def start_server():
     """WebSocket szerver indítása"""
     async with websockets.serve(handle_client, HOST, PORT):
-        print(f"[INFO]: WebSocket szerver fut: ws://{HOST}:{PORT}")
-        print("[INFO]: Várakozás kliensekre...")
+        logger.info(f"WebSocket szerver fut: ws://{HOST}:{PORT}")
+        logger.info(f"Várakozás kliensekre...")
         await asyncio.Future()  # Run forever
 
 
@@ -362,11 +379,11 @@ if __name__ == "__main__":
     server_thread = Thread(target=run_server, daemon=True)
     server_thread.start()
 
-    print("[INFO]: Nyomj Enter-t a leállításhoz...")
+    logger.info("Nyomj Enter-t a leállításhoz...")
 
     try:
         input()
     except KeyboardInterrupt:
         pass
 
-    print("[INFO]: Szerver leállítása...")
+    logger.info("Szerver leállítása...")
