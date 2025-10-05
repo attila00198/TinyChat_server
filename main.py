@@ -54,12 +54,7 @@ def get_user_list():
 
 
 def get_command_list():
-    return {
-        "type": "command_list",
-        "username": "System",
-        "content": "[INFO]: Not Implemented",
-        "timestamp": datetime.now().strftime("%H:%M:%S"),
-    }
+    return {cmd: {"usage": info["usage"]} for cmd, info in COMMANDS.items()}
 
 
 def find_user_by_username(username):
@@ -255,7 +250,7 @@ async def handle_client(websocket):
             try:
                 # JSON üzenet feldolgozása
                 data = json.loads(message)
-                logger.debug(f"received: ", data)
+                logger.debug(f"Fogadva: {data}")
 
                 # Username mentése ha még nincs
                 if "username" in data and users[client_id]["username"] is None:
