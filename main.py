@@ -40,6 +40,10 @@ else:
 ###############################
 
 
+def getCurrentTime():
+    return datetime.now().strftime("%H:%M:%S")
+
+
 def get_user_list():
     """User lista összeállítása socket nélkül"""
     return [
@@ -65,47 +69,6 @@ def find_user_by_username(username):
     return None, None
 
 
-async def send_to_user(username, message):
-    """Üzenet küldése egy adott usernek"""
-    for user_data in users.values():
-        if user_data["username"] == username:
-            try:
-                await user_data["websocket"].send(json.dumps(message))
-            except:
-                pass
-            break
-
-
-async def broadcast(message, exclude=None):
-    """Üzenet broadcast minden kliensnek (exclude kivételével)"""
-    # Új dict készítése a type mezővel (ne módosítsuk az eredeti objektumot)
-
-    for client_id, user_data in users.items():
-        if client_id != exclude:
-            try:
-                await user_data["websocket"].send(json.dumps(message))
-                logger.debug(f"Elküldve: {message}")
-            except:
-                pass
-
-
-async def send_user_list(message):
-    """User lista broadcast minden kliensnek"""
-    for user_data in users.values():
-        try:
-            await user_data["websocket"].send(json.dumps(message))
-        except:
-            pass
-
-
-async def send_command_list(message):
-    for user_data in users.values():
-        try:
-            await user_data["websocket"].send(json.dumps(message))
-        except:
-            pass
-
-
 ###############################
 ####  Command Handlers     ####
 ###############################
@@ -118,7 +81,7 @@ async def handle_whisper(username: str, args: list, websocket: ServerConnection)
             "type": "system",
             "username": "System",
             "content": "Használat: /whisper [cél_user] [üzenet]",
-            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "timestamp": getCurrentTime(),
         }
         await send_to_user(username, error_msg)
         return
@@ -133,7 +96,7 @@ async def handle_whisper(username: str, args: list, websocket: ServerConnection)
             "type": "system",
             "username": "System",
             "content": f"User '{target_user}' nem található",
-            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "timestamp": getCurrentTime(),
         }
         await send_to_user(username, error_msg)
         return
@@ -144,7 +107,7 @@ async def handle_whisper(username: str, args: list, websocket: ServerConnection)
         "from": username,
         "to": target_user,
         "content": message_content,
-        "timestamp": datetime.now().strftime("%H:%M:%S"),
+        "timestamp": getCurrentTime(),
     }
     await send_to_user(target_user, private_msg)
     await send_to_user(username, private_msg)
@@ -156,7 +119,7 @@ async def handle_login(username: str, args: list, websocket: ServerConnection):
         "type": "system",
         "username": "System",
         "content": "Command '/login' Not implemented",
-        "timestamp": datetime.now().strftime("%H:%M:%S"),
+        "timestamp": getCurrentTime(),
     }
     await send_to_user(username, response)
 
@@ -167,7 +130,7 @@ async def handle_to(username: str, args: list, websocket: ServerConnection):
         "type": "system",
         "username": "System",
         "content": "Command '/to' Not implemented",
-        "timestamp": datetime.now().strftime("%H:%M:%S"),
+        "timestamp": getCurrentTime(),
     }
     await send_to_user(username, response)
 
@@ -178,7 +141,7 @@ async def handle_help(username: str, args: list, websocket: ServerConnection):
         "type": "system",
         "username": "System",
         "content": "Command '/help' Not implemented",
-        "timestamp": datetime.now().strftime("%H:%M:%S"),
+        "timestamp": getCurrentTime(),
     }
     await send_to_user(username, response)
 
@@ -222,7 +185,7 @@ async def process_command(client_id: int, data: dict, websocket: ServerConnectio
             "type": "system",
             "username": "System",
             "content": f"Ismeretlen parancs: {command}",
-            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "timestamp": getCurrentTime(),
         }
         await send_to_user(username, error_msg)
 
@@ -230,6 +193,46 @@ async def process_command(client_id: int, data: dict, websocket: ServerConnectio
 ###############################
 ####   WebSocket Server    ####
 ###############################
+
+
+async def send_to_user(username, message):
+    """Üzenet küldése egy adott usernek"""
+    for user_data in users.values():
+        if user_data["username"] == username:
+            try:
+                await user_data["websocket"].send(json.dumps(message))
+            except:
+                pass
+            break
+
+
+async def broadcast(message, exclude=None):
+    """Üzenet broadcast minden kliensnek (exclude kivételével)"""
+    # Új dict készítése a type mezővel (ne módosítsuk az eredeti objektumot)
+
+    for client_id, user_data in users.items():
+        if client_id != exclude:
+            try:
+                await user_data["websocket"].send(json.dumps(message))
+                logger.debug(f"Elküldve: {message}")
+            except:
+                pass
+
+
+""" async def send_user_list(message):
+    for user_data in users.values():
+        try:
+            await user_data["websocket"].send(json.dumps(message))
+        except:
+            pass
+
+
+async def send_command_list(message):
+    for user_data in users.values():
+        try:
+            await user_data["websocket"].send(json.dumps(message))
+        except:
+            pass """
 
 
 async def handle_client(websocket):
@@ -261,15 +264,15 @@ async def handle_client(websocket):
                     user_list_message = {
                         "type": "user_list",
                         "content": get_user_list(),
-                        "timestamp": datetime.now().strftime("%H:%M:%S"),
+                        "timestamp": getCurrentTime(),
                     }
-                    await send_user_list(user_list_message)
+                    await broadcast(user_list_message)
                     command_list_message = {
                         "type": "command_list",
                         "content": get_command_list(),
-                        "timestamp": datetime.now().strftime("%H:%M:%S"),
+                        "timestamp": getCurrentTime(),
                     }
-                    await send_command_list(command_list_message)
+                    await broadcast(command_list_message)
 
                 # Üzenet típus validálása
                 msg_type = data.get("type")
@@ -280,7 +283,7 @@ async def handle_client(websocket):
                         "type": "system",
                         "username": "System",
                         "content": "[ERROR]: Hibás üzenet típus.",
-                        "timestamp": datetime.now().strftime("%H:%M:%S"),
+                        "timestamp": getCurrentTime(),
                     }
                     await send_to_user(users[client_id]["username"], error_response)
 
@@ -290,7 +293,7 @@ async def handle_client(websocket):
                         "type": "system",
                         "username": "System",
                         "content": "Jelenleg némítva vagy",
-                        "timestamp": datetime.now().strftime("%H:%M:%S"),
+                        "timestamp": getCurrentTime(),
                     }
                     await websocket.send(json.dumps(timeout_msg))
                     continue
@@ -301,7 +304,7 @@ async def handle_client(websocket):
                         "type": "system",
                         "username": "System",
                         "content": f"{users[client_id]['username']} csatlakozott.",
-                        "timestamp": datetime.now().strftime("%H:%M:%S"),
+                        "timestamp": getCurrentTime(),
                     }
                     await broadcast(join_message)
                     continue
@@ -327,7 +330,7 @@ async def handle_client(websocket):
                     "type": "system",
                     "username": "System",
                     "content": "[ERROR]: Érvénytelen JSON formátum",
-                    "timestamp": datetime.now().strftime("%H:%M:%S"),
+                    "timestamp": getCurrentTime(),
                 }
                 await websocket.send(json.dumps(error_response))
 
@@ -351,9 +354,9 @@ async def handle_client(websocket):
                 user_list_message = {
                     "type": "user_list",
                     "content": get_user_list(),
-                    "timestamp": datetime.now().strftime("%H:%M:%S"),
+                    "timestamp": getCurrentTime(),
                 }
-                await send_user_list(user_list_message)
+                await broadcast(user_list_message)
 
 
 async def start_server():
