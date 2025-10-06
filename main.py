@@ -78,7 +78,7 @@ async def handle_whisper(username: str, args: list, websocket: ServerConnection)
     """Whisper parancs kezelése"""
     if len(args) < 2:
         error_msg = {
-            "type": "system",
+            "type": "error",
             "username": "System",
             "content": "Használat: /whisper [cél_user] [üzenet]",
             "timestamp": getCurrentTime(),
@@ -93,7 +93,7 @@ async def handle_whisper(username: str, args: list, websocket: ServerConnection)
     target_id, target_data = find_user_by_username(target_user)
     if not target_data:
         error_msg = {
-            "type": "system",
+            "type": "error",
             "username": "System",
             "content": f"User '{target_user}' nem található",
             "timestamp": getCurrentTime(),
@@ -121,7 +121,7 @@ async def handle_login(username: str, args: list, websocket: ServerConnection):
     """
     if len(args) < 1:
         error_msg = {
-            "type": "system",
+            "type": "error",
             "username": "System",
             "content": "Használat: /login [jelszó]",
             "timestamp": getCurrentTime(),
@@ -135,7 +135,7 @@ async def handle_login(username: str, args: list, websocket: ServerConnection):
     client_id, user_data = find_user_by_username(username)
     if not user_data:
         error_msg = {
-            "type": "system",
+            "type": "error",
             "username": "System",
             "content": "Hiba: felhasználó nem található",
             "timestamp": getCurrentTime(),
@@ -174,7 +174,7 @@ async def handle_login(username: str, args: list, websocket: ServerConnection):
         logger.info(f"[INFO]: {username} promoted to moderator")
     else:
         fail = {
-            "type": "system",
+            "type": "error",
             "username": "System",
             "content": "Hibás jelszó",
             "timestamp": getCurrentTime(),
@@ -193,7 +193,7 @@ async def handle_timeout(username: str, args: list, websocket: ServerConnection)
     # Validate args
     if len(args) < 2:
         error_msg = {
-            "type": "system",
+            "type": "error",
             "username": "System",
             "content": "Használat: /to [cél_user] [idő másodpercben]",
             "timestamp": getCurrentTime(),
@@ -208,7 +208,7 @@ async def handle_timeout(username: str, args: list, websocket: ServerConnection)
             raise ValueError()
     except ValueError:
         error_msg = {
-            "type": "system",
+            "type": "error",
             "username": "System",
             "content": "Az időnek pozitív egész számnak kell lennie",
             "timestamp": getCurrentTime(),
@@ -220,7 +220,7 @@ async def handle_timeout(username: str, args: list, websocket: ServerConnection)
     caller_id, caller_data = find_user_by_username(username)
     if not caller_data or not caller_data.get("is_mod", False):
         error_msg = {
-            "type": "system",
+            "type": "error",
             "username": "System",
             "content": "Csak moderátorok használhatják ezt a parancsot",
             "timestamp": getCurrentTime(),
@@ -232,7 +232,7 @@ async def handle_timeout(username: str, args: list, websocket: ServerConnection)
     target_id, target_data = find_user_by_username(target_username)
     if not target_data:
         error_msg = {
-            "type": "system",
+            "type": "error",
             "username": "System",
             "content": f'User "{target_username}" nem található',
             "timestamp": getCurrentTime(),
@@ -353,7 +353,7 @@ async def process_command(client_id: int, data: dict, websocket: ServerConnectio
     else:
         logger.error(f"Ismeretlen parancs: {command}")
         error_msg = {
-            "type": "system",
+            "type": "error",
             "username": "System",
             "content": f"Ismeretlen parancs: {command}",
             "timestamp": getCurrentTime(),
@@ -443,7 +443,7 @@ async def handle_client(websocket):
 
                 if msg_type not in valid_types:
                     error_response = {
-                        "type": "system",
+                        "type": "error",
                         "username": "System",
                         "content": "[ERROR]: Hibás üzenet típus.",
                         "timestamp": getCurrentTime(),
@@ -491,7 +491,7 @@ async def handle_client(websocket):
 
             except json.JSONDecodeError:
                 error_response = {
-                    "type": "system",
+                    "type": "error",
                     "username": "System",
                     "content": "[ERROR]: Érvénytelen JSON formátum",
                     "timestamp": getCurrentTime(),
