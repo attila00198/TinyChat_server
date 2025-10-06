@@ -160,7 +160,7 @@ async def handle_login(username: str, args: list, websocket: ServerConnection):
         success = {
             "type": "system",
             "username": "System",
-            "content": f"{user_data["username"]} moderátor lett.",
+            "content": f"{user_data['username']} moderátor lett.",
             "timestamp": getCurrentTime(),
         }
         await broadcast(success)
