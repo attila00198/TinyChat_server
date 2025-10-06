@@ -2,3 +2,20 @@
 tests
 __pycache__
 main.old.py
+
+# Local env and caches
+.env
+*.pyc
+.pytest_cache/
+
+# Editor/IDE
+.vscode/
+.idea/
+
+# Logs and OS files
+*.log
+.DS_Store
+Thumbs.db
+
+# Node modules (if client code added)
+node_modules/
