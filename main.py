@@ -2,15 +2,16 @@ import asyncio
 import websockets
 import json
 import logging
+import os
 
 from datetime import datetime
 from threading import Thread
 from websockets import ServerConnection
 
-# Konfiguráció
-HOST = "0.0.0.0"
-PORT = 8765
-MOD_PASSWORD = "admin123"
+# Konfiguráció (környezeti változókból is felülírható)
+HOST = os.getenv("HOST", "0.0.0.0")
+PORT = int(os.getenv("PORT", "8765"))
+MOD_PASSWORD = os.getenv("MOD_PASSWORD", "admin123")
 
 # User információk tárolása
 users = {}
