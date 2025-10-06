@@ -153,15 +153,16 @@ async def handle_login(username: str, args: list, websocket: ServerConnection):
         await send_to_user(username, info)
         return
 
+    # Braadcast if someone gets moderator role
     if password == MOD_PASSWORD:
         user_data["is_mod"] = True
         success = {
             "type": "system",
             "username": "System",
-            "content": "Sikeres bejelentkezés: moderátor jogosultság megadva",
+            "content": f"{user_data["username"]} moderátor lett.",
             "timestamp": getCurrentTime(),
         }
-        await send_to_user(username, success)
+        await broadcast(success)
 
         # Broadcast updated user list to everyone
         user_list_message = {
