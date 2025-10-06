@@ -114,25 +114,195 @@ async def handle_whisper(username: str, args: list, websocket: ServerConnection)
 
 
 async def handle_login(username: str, args: list, websocket: ServerConnection):
-    """Login parancs kezelése"""
-    response = {
-        "type": "system",
-        "username": "System",
-        "content": "Command '/login' Not implemented",
-        "timestamp": getCurrentTime(),
-    }
-    await send_to_user(username, response)
+    """Login parancs kezelése: /login [jelszó]
+
+    If the provided password matches MOD_PASSWORD, promote the calling
+    user to moderator (is_mod=True) and broadcast updated user list.
+    """
+    if len(args) < 1:
+        error_msg = {
+            "type": "system",
+            "username": "System",
+            "content": "Használat: /login [jelszó]",
+            "timestamp": getCurrentTime(),
+        }
+        await send_to_user(username, error_msg)
+        return
+
+    password = args[0]
+
+    # Find caller
+    client_id, user_data = find_user_by_username(username)
+    if not user_data:
+        error_msg = {
+            "type": "system",
+            "username": "System",
+            "content": "Hiba: felhasználó nem található",
+            "timestamp": getCurrentTime(),
+        }
+        await send_to_user(username, error_msg)
+        return
+
+    if user_data.get("is_mod", False):
+        info = {
+            "type": "system",
+            "username": "System",
+            "content": "Már moderátor vagy",
+            "timestamp": getCurrentTime(),
+        }
+        await send_to_user(username, info)
+        return
+
+    if password == MOD_PASSWORD:
+        user_data["is_mod"] = True
+        success = {
+            "type": "system",
+            "username": "System",
+            "content": "Sikeres bejelentkezés: moderátor jogosultság megadva",
+            "timestamp": getCurrentTime(),
+        }
+        await send_to_user(username, success)
+
+        # Broadcast updated user list to everyone
+        user_list_message = {
+            "type": "user_list",
+            "content": get_user_list(),
+            "timestamp": getCurrentTime(),
+        }
+        await broadcast(user_list_message)
+        logger.info(f"[INFO]: {username} promoted to moderator")
+    else:
+        fail = {
+            "type": "system",
+            "username": "System",
+            "content": "Hibás jelszó",
+            "timestamp": getCurrentTime(),
+        }
+        await send_to_user(username, fail)
 
 
-async def handle_to(username: str, args: list, websocket: ServerConnection):
-    """Timeout parancs kezelése"""
-    response = {
+async def handle_timeout(username: str, args: list, websocket: ServerConnection):
+    """Handle the /to (timeout) command.
+
+    Usage: /to [target_user] [seconds]
+    Only moderators can invoke this command. When called it will set the
+    target user's `is_timed_out` flag and schedule an expiry task that will
+    un-mute the user after the given number of seconds.
+    """
+    # Validate args
+    if len(args) < 2:
+        error_msg = {
+            "type": "system",
+            "username": "System",
+            "content": "Használat: /to [cél_user] [idő másodpercben]",
+            "timestamp": getCurrentTime(),
+        }
+        await send_to_user(username, error_msg)
+        return
+
+    target_username = args[0]
+    try:
+        seconds = int(args[1])
+        if seconds <= 0:
+            raise ValueError()
+    except ValueError:
+        error_msg = {
+            "type": "system",
+            "username": "System",
+            "content": "Az időnek pozitív egész számnak kell lennie",
+            "timestamp": getCurrentTime(),
+        }
+        await send_to_user(username, error_msg)
+        return
+
+    # Verify caller is moderator
+    caller_id, caller_data = find_user_by_username(username)
+    if not caller_data or not caller_data.get("is_mod", False):
+        error_msg = {
+            "type": "system",
+            "username": "System",
+            "content": "Csak moderátorok használhatják ezt a parancsot",
+            "timestamp": getCurrentTime(),
+        }
+        await send_to_user(username, error_msg)
+        return
+
+    # Find target user
+    target_id, target_data = find_user_by_username(target_username)
+    if not target_data:
+        error_msg = {
+            "type": "system",
+            "username": "System",
+            "content": f'User "{target_username}" nem található',
+            "timestamp": getCurrentTime(),
+        }
+        await send_to_user(username, error_msg)
+        return
+
+    # Apply timeout
+    target_data["is_timed_out"] = True
+
+    # Cancel previous timeout task if exist
+    if target_username in timeout_tasks:
+        try:
+            timeout_tasks[target_username].cancel()
+        except Exception as e:
+            logger.exception(
+                f"Failed to cancel existing timeout task for {target_username}: {e}"
+            )
+
+    # Expiry coroutine
+    async def _expire_timeout(t_username: str, t_seconds: int):
+        await asyncio.sleep(t_seconds)
+        cid, udata = find_user_by_username(t_username)
+        if cid and udata:
+            udata["is_timed_out"] = False
+
+            # Notify timed-out user
+            system_msg = {
+                "type": "system",
+                "username": "System",
+                "content": "Némításod lejárt, újra írhatsz",
+                "timestamp": getCurrentTime(),
+            }
+            await send_to_user(t_username, system_msg)
+
+            # Broadcast updated user list
+            user_list_message = {
+                "type": "user_list",
+                "content": get_user_list(),
+                "timestamp": getCurrentTime(),
+            }
+            await broadcast(user_list_message)
+
+            logger.info(f"[INFO]: {t_username} timeout lejárt")
+
+        # Clean up task record
+        if t_username in timeout_tasks:
+            del timeout_tasks[t_username]
+
+    # Schedule expiry task
+    task = asyncio.create_task(_expire_timeout(target_username, seconds))
+    timeout_tasks[target_username] = task
+
+    # Broadcast system message
+    broadcast_msg = {
         "type": "system",
         "username": "System",
-        "content": "Command '/to' Not implemented",
+        "content": f"{username} némította {target_username}-t {seconds} másodpercre",
         "timestamp": getCurrentTime(),
     }
-    await send_to_user(username, response)
+    await broadcast(broadcast_msg)
+
+    # Broadcast updated user list
+    user_list_message = {
+        "type": "user_list",
+        "content": get_user_list(),
+        "timestamp": getCurrentTime(),
+    }
+    await broadcast(user_list_message)
+
+    logger.info(f"[INFO]: {target_username} némítva {seconds} másodpercre")
 
 
 async def handle_help(username: str, args: list, websocket: ServerConnection):
@@ -157,7 +327,7 @@ COMMANDS = {
     },
     "/to": {
         "usage": "/to [cél_user] [idő]",
-        "handler": handle_to,
+        "handler": handle_timeout,
     },
     "/help": {"usage": "/help [parancs](opcionális)", "handler": handle_help},
 }
@@ -201,38 +371,27 @@ async def send_to_user(username, message):
         if user_data["username"] == username:
             try:
                 await user_data["websocket"].send(json.dumps(message))
-            except:
-                pass
+            except websockets.exceptions.ConnectionClosed as e:
+                logger.debug(f"Connection closed when sending to {username}: {e}")
+            except Exception as e:
+                logger.exception(f"Unexpected error when sending to {username}: {e}")
             break
 
 
 async def broadcast(message, exclude=None):
     """Üzenet broadcast minden kliensnek (exclude kivételével)"""
-    # Új dict készítése a type mezővel (ne módosítsuk az eredeti objektumot)
-
-    for client_id, user_data in users.items():
+    # iterate over a snapshot to avoid runtime errors if users is modified
+    for client_id, user_data in list(users.items()):
         if client_id != exclude:
             try:
                 await user_data["websocket"].send(json.dumps(message))
                 logger.debug(f"Elküldve: {message}")
-            except:
-                pass
-
-
-""" async def send_user_list(message):
-    for user_data in users.values():
-        try:
-            await user_data["websocket"].send(json.dumps(message))
-        except:
-            pass
-
-
-async def send_command_list(message):
-    for user_data in users.values():
-        try:
-            await user_data["websocket"].send(json.dumps(message))
-        except:
-            pass """
+            except websockets.exceptions.ConnectionClosed as e:
+                logger.debug(f"Connection closed when broadcasting to {client_id}: {e}")
+            except Exception as e:
+                logger.exception(
+                    f"Unexpected error when broadcasting to {client_id}: {e}"
+                )
 
 
 async def handle_client(websocket):
@@ -246,7 +405,6 @@ async def handle_client(websocket):
     }
 
     logger.info(f"Új kliens csatlakozott. ID: {client_id}")
-    logger.info(f"Aktív userek száma: {len(users)}")
 
     try:
         async for message in websocket:
@@ -259,6 +417,7 @@ async def handle_client(websocket):
                 if "username" in data and users[client_id]["username"] is None:
                     users[client_id]["username"] = data["username"]
                     logger.info(f"Felhasználónév beállítva: {data['username']}")
+                    logger.info(f"Aktív userek száma: {len(users)}")
 
                     # Frissített user lista küldése MINDENKINEK
                     user_list_message = {
@@ -267,16 +426,19 @@ async def handle_client(websocket):
                         "timestamp": getCurrentTime(),
                     }
                     await broadcast(user_list_message)
+                    # Parancs lista elküldése az új felhasználónak.
                     command_list_message = {
                         "type": "command_list",
                         "content": get_command_list(),
                         "timestamp": getCurrentTime(),
                     }
-                    await broadcast(command_list_message)
+                    await send_to_user(
+                        users[client_id]["username"], command_list_message
+                    )
 
                 # Üzenet típus validálása
                 msg_type = data.get("type")
-                valid_types = ["message", "command", "join"]
+                valid_types = ["public", "command", "join"]
 
                 if msg_type not in valid_types:
                     error_response = {
@@ -299,7 +461,6 @@ async def handle_client(websocket):
                     continue
 
                 elif msg_type == "join":
-                    # JOIN típus kezelése
                     join_message = {
                         "type": "system",
                         "username": "System",
@@ -314,11 +475,13 @@ async def handle_client(websocket):
                     await process_command(client_id, data, websocket)
                     continue
 
-                elif msg_type == "message":
-                    # MESSAGE típus kezelése (public broadcast)
+                elif msg_type == "public":
+                    # PUBLIC típus kezelése
                     message_data = {
+                        "type": "public",
                         "username": data.get("username", users[client_id]["username"]),
                         "content": data.get("content", ""),
+                        "timestamp": getCurrentTime(),
                     }
                     await broadcast(message_data, exclude=client_id)
                     continue
@@ -373,15 +536,10 @@ def run_server():
 
 
 if __name__ == "__main__":
-    # Szerver indítása threadben
-    server_thread = Thread(target=run_server, daemon=True)
-    server_thread.start()
-
-    logger.info("Nyomj Enter-t a leállításhoz...")
-
+    # Non-interactive server start: run the asyncio server in the current
+    # process. Use Ctrl+C to stop the server (KeyboardInterrupt will be
+    # handled and logged).
     try:
-        input()
+        asyncio.run(start_server())
     except KeyboardInterrupt:
-        pass
-
-    logger.info("Szerver leállítása...")
+        logger.info("Szerver leállítása...")
