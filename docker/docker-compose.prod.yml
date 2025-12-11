@@ -1,0 +1,73 @@
+# Production Docker Compose configuration for TinyChat server
+# Usage: docker-compose -f docker-compose.prod.yml up -d
+#
+# This file uses the pre-built image from Docker Hub, so you don't need
+# to rebuild locally. Just pull and run!
+
+version: '3.8'
+
+services:
+  tinychat:
+    # Pull latest image from Docker Hub
+    image: attila00198/tinychat-server:latest
+    
+    container_name: tinychat-server
+    
+    # Server configuration via environment variables
+    environment:
+      # Network settings
+      - HOST=0.0.0.0
+      - PORT=8765
+      
+      # Moderator password (CHANGE THIS ON PRODUCTION!)
+      - MOD_PASSWORD=admin123
+      
+      # SSL/TLS configuration (set USE_SSL=true to enable HTTPS)
+      - USE_SSL=true
+      - SSL_CERT_PATH=/certs/fullchain.pem
+      - SSL_KEY_PATH=/certs/privkey.pem
+    
+    # Port mapping: host:container
+    ports:
+      - "8765:8765"
+    
+    # Mount Certbot certificate files (production)
+    volumes:
+      - /etc/letsencrypt/live/krassus.ddns.net-0001:/certs:ro
+    
+    # Restart policy for production (auto-restart on failure or reboot)
+    restart: always
+    
+    # Resource limits (optional, adjust to your server capacity)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '1'
+    #       memory: 512M
+    #     reservations:
+    #       cpus: '0.5'
+    #       memory: 256M
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8765), timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+# Optional: Add a backup/restart service (uncomment to enable)
+# services:
+#   watchtower:
+#     image: containrrr/watchtower
+#     volumes:
+#       - /var/run/docker.sock:/var/run/docker.sock
+#     command: --interval 300 tinychat-server
+#     # Automatically pulls and restarts containers when image updates are available
