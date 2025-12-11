@@ -7,7 +7,7 @@ set -e
 echo "=== TinyChat Server Setup with Supervisor ==="
 
 # Variables
-TINYCHAT_USER="tinychat"
+TINYCHAT_USER="attila"
 TINYCHAT_HOME="/opt/tinychat"
 PYTHON_VERSION="3.11"
 CERT_DIR="$TINYCHAT_HOME/certs"
@@ -18,13 +18,11 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-# 1. Create service user
-echo "Creating service user..."
+# 1. Use existing service user
+echo "Using existing service user: $TINYCHAT_USER"
 if ! id "$TINYCHAT_USER" &>/dev/null; then
-    useradd -m -s /bin/bash -d "$TINYCHAT_HOME" "$TINYCHAT_USER"
-    echo "✓ User $TINYCHAT_USER created"
-else
-    echo "✓ User $TINYCHAT_USER already exists"
+    echo "ERROR: user $TINYCHAT_USER does not exist. Create it or change TINYCHAT_USER variable." >&2
+    exit 1
 fi
 
 # 2. Clone/update project
@@ -186,7 +184,7 @@ sleep 2
 echo ""
 echo "=== Setup Complete! ==="
 echo ""
-echo "✓ Service user created: $TINYCHAT_USER"
+echo "✓ Using service user: $TINYCHAT_USER"
 echo "✓ Project installed to: $TINYCHAT_HOME/chat_server"
 echo "✓ Virtual environment created"
 echo "✓ Python packages installed"
