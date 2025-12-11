@@ -2,6 +2,7 @@
 tests
 __pycache__
 main.old.py
+.env.*
 
 # Local env and caches
 .env
@@ -11,6 +12,7 @@ main.old.py
 # Editor/IDE
 .vscode/
 .idea/
+certs
 
 # Logs and OS files
 *.log

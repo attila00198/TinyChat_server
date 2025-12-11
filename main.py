@@ -3,15 +3,22 @@ import websockets
 import json
 import logging
 import os
+import ssl
 
+from dotenv import load_dotenv
 from datetime import datetime
-from threading import Thread
 from websockets import ServerConnection
 
 # Konfiguráció (környezeti változókból is felülírható)
-HOST = os.getenv("HOST", "0.0.0.0")
+load_dotenv()
+HOST = os.getenv("HOST", "127.0.0.1")
 PORT = int(os.getenv("PORT", "8765"))
 MOD_PASSWORD = os.getenv("MOD_PASSWORD", "admin123")
+
+# SSL/TLS Configuration
+USE_SSL = os.getenv("USE_SSL", "False").lower() == "true"
+SSL_CERT_PATH = os.getenv("SSL_CERT_PATH", "./certs/server.crt")
+SSL_KEY_PATH = os.getenv("SSL_KEY_PATH", "./certs/server.key")
 
 # User információk tárolása
 users = {}
@@ -525,9 +532,27 @@ async def handle_client(websocket):
 
 
 async def start_server():
-    """WebSocket szerver indítása"""
-    async with websockets.serve(handle_client, HOST, PORT):
-        logger.info(f"WebSocket szerver fut: ws://{HOST}:{PORT}")
+    """WebSocket szerver indítása SSL/TLS támogatással"""
+    ssl_context = None
+    protocol = "ws"
+    
+    if USE_SSL:
+        # SSL context létrehozása
+        ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        try:
+            ssl_context.load_cert_chain(SSL_CERT_PATH, SSL_KEY_PATH)
+            protocol = "wss"
+            logger.info(f"SSL/TLS engedélyezve: cert={SSL_CERT_PATH}, key={SSL_KEY_PATH}")
+        except FileNotFoundError as e:
+            logger.error(f"SSL tanúsítvány nem található: {e}")
+            logger.warning("Visszavonás: SSL nélkül futtatás")
+            ssl_context = None
+        except Exception as e:
+            logger.error(f"SSL kontextus létrehozása sikertelen: {e}")
+            ssl_context = None
+    
+    async with websockets.serve(handle_client, HOST, PORT, ssl=ssl_context):
+        logger.info(f"WebSocket szerver fut: {protocol}://{HOST}:{PORT}")
         logger.info(f"Várakozás kliensekre...")
         await asyncio.Future()  # Run forever
 

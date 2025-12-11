@@ -1,4 +1,5 @@
 websockets>=11.0
+python-dotenv
 
 # Optional: testing tools
 pytest>=7.0
