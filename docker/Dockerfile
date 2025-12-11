@@ -15,13 +15,12 @@ RUN apt-get update && \
 		cargo \
 	&& rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt ./
+COPY ../requirements.txt ./
 RUN pip install --upgrade pip setuptools wheel && \
 	pip install --no-cache-dir -r requirements.txt
 
 # Copy application sources (from parent directory context)
-COPY main.py generate_certs.py ./
-COPY . .
+COPY ../main.py ./
 
 # Create a non-root user for running the app
 RUN useradd --create-home appuser && chown -R appuser:appuser /app
