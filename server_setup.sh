@@ -1,6 +1,6 @@
 #!/bin/bash
 # TinyChat Server Setup Script for Linux/Ubuntu
-# Run this on your server: bash server_setup.sh
+# Run this on your server: sudo bash server_setup.sh
 
 set -e
 
@@ -10,11 +10,18 @@ echo "=== TinyChat Server Setup with Supervisor ==="
 TINYCHAT_USER="tinychat"
 TINYCHAT_HOME="/opt/tinychat"
 PYTHON_VERSION="3.11"
+CERT_DIR="$TINYCHAT_HOME/certs"
+
+# Check if running as root
+if [ "$(id -u)" -ne 0 ]; then
+    echo "This script must be run as root. Use sudo." >&2
+    exit 1
+fi
 
 # 1. Create service user
 echo "Creating service user..."
 if ! id "$TINYCHAT_USER" &>/dev/null; then
-    sudo useradd -m -s /bin/bash -d "$TINYCHAT_HOME" "$TINYCHAT_USER"
+    useradd -m -s /bin/bash -d "$TINYCHAT_HOME" "$TINYCHAT_USER"
     echo "✓ User $TINYCHAT_USER created"
 else
     echo "✓ User $TINYCHAT_USER already exists"
@@ -23,20 +30,20 @@ fi
 # 2. Clone/update project
 echo "Setting up project directory..."
 if [ ! -d "$TINYCHAT_HOME/chat_server" ]; then
-    sudo mkdir -p "$TINYCHAT_HOME"
+    mkdir -p "$TINYCHAT_HOME"
     cd "$TINYCHAT_HOME"
-    sudo git clone https://github.com/attila00198/TinyChat_server.git chat_server
+    git clone https://github.com/attila00198/TinyChat_server.git chat_server
 else
     cd "$TINYCHAT_HOME/chat_server"
-    sudo git pull origin master
+    git pull origin master || echo "⚠ Git pull failed, continuing..."
 fi
 
-sudo chown -R "$TINYCHAT_USER:$TINYCHAT_USER" "$TINYCHAT_HOME"
+chown -R "$TINYCHAT_USER:$TINYCHAT_USER" "$TINYCHAT_HOME"
 
 # 3. Install Python and dependencies
 echo "Installing Python and system dependencies..."
-sudo apt-get update
-sudo apt-get install -y \
+apt-get update
+apt-get install -y \
     python$PYTHON_VERSION \
     python$PYTHON_VERSION-venv \
     python$PYTHON_VERSION-dev \
@@ -60,10 +67,16 @@ echo "Installing Python packages..."
 sudo -u "$TINYCHAT_USER" ./venv/bin/pip install --upgrade pip setuptools wheel
 sudo -u "$TINYCHAT_USER" ./venv/bin/pip install -r requirements.txt
 
-# 6. Create .env file
+# 6. Create certificates directory
+echo "Creating certificates directory..."
+mkdir -p "$CERT_DIR"
+chown root:root "$CERT_DIR"
+chmod 755 "$CERT_DIR"
+
+# 7. Create .env file
 echo "Creating .env configuration..."
 if [ ! -f ".env" ]; then
-    cat > ".env" << 'EOF'
+    cat > ".env" << EOF
 # TinyChat Server Configuration
 HOST=0.0.0.0
 PORT=8765
@@ -71,51 +84,122 @@ MOD_PASSWORD=admin123
 
 # SSL/TLS
 USE_SSL=true
-SSL_CERT_PATH=/etc/letsencrypt/archive/krassus.ddns.net-0001/fullchain1.pem
-SSL_KEY_PATH=/etc/letsencrypt/archive/krassus.ddns.net-0001/privkey1.pem
+SSL_CERT_PATH=$CERT_DIR/fullchain.pem
+SSL_KEY_PATH=$CERT_DIR/privkey.pem
 EOF
-    sudo chown "$TINYCHAT_USER:$TINYCHAT_USER" ".env"
+    chown "$TINYCHAT_USER:$TINYCHAT_USER" ".env"
     echo "✓ Created .env - EDIT THIS FILE and change MOD_PASSWORD!"
 else
     echo "✓ .env already exists"
 fi
 
-# 7. Install supervisor configuration
+# 8. Create supervisor configuration
 echo "Setting up supervisor..."
-sudo cp supervisor_tinychat.conf /etc/supervisor/conf.d/tinychat.conf
-sudo systemctl restart supervisor
-sudo supervisorctl reread
-sudo supervisorctl update
-
-# 8. Set up Certbot renewal hook
-echo "Setting up Certbot renewal hook..."
-sudo mkdir -p /etc/letsencrypt/renewal-hooks/post
-sudo tee /etc/letsencrypt/renewal-hooks/post/tinychat.sh > /dev/null << 'EOF'
-#!/bin/bash
-# Restart TinyChat after certificate renewal
-supervisorctl restart tinychat
+cat > /etc/supervisor/conf.d/tinychat.conf << EOF
+[program:tinychat]
+command=$TINYCHAT_HOME/chat_server/venv/bin/python $TINYCHAT_HOME/chat_server/main.py
+directory=$TINYCHAT_HOME/chat_server
+user=$TINYCHAT_USER
+autostart=true
+autorestart=true
+redirect_stderr=true
+stdout_logfile=$TINYCHAT_HOME/chat_server/tinychat.log
+stderr_logfile=$TINYCHAT_HOME/chat_server/tinychat_error.log
+environment=PATH="$TINYCHAT_HOME/chat_server/venv/bin"
 EOF
-sudo chmod +x /etc/letsencrypt/renewal-hooks/post/tinychat.sh
 
-# 9. Start the service
+systemctl restart supervisor
+supervisorctl reread
+supervisorctl update
+
+# 9. Check for existing certificates
+echo ""
+echo "Checking for Let's Encrypt certificates..."
+CERT_ARCHIVE="/etc/letsencrypt/archive"
+if [ -d "$CERT_ARCHIVE" ] && [ -n "$(ls -A $CERT_ARCHIVE 2>/dev/null)" ]; then
+    echo "✓ Found existing certificates"
+    
+    # Find the certificate directory
+    CERT_DOMAIN=$(ls -1 "$CERT_ARCHIVE" | head -n1)
+    
+    if [ -n "$CERT_DOMAIN" ]; then
+        echo "Using certificates for: $CERT_DOMAIN"
+        
+        # Copy latest certs
+        FULL=$(ls -1 "$CERT_ARCHIVE/$CERT_DOMAIN"/fullchain*.pem 2>/dev/null | sort -V | tail -n1)
+        KEY=$(ls -1 "$CERT_ARCHIVE/$CERT_DOMAIN"/privkey*.pem 2>/dev/null | sort -V | tail -n1)
+        
+        if [ -n "$FULL" ] && [ -n "$KEY" ]; then
+            cp -f "$FULL" "$CERT_DIR/fullchain.pem"
+            cp -f "$KEY" "$CERT_DIR/privkey.pem"
+            chown "$TINYCHAT_USER:$TINYCHAT_USER" "$CERT_DIR"/*.pem
+            chmod 644 "$CERT_DIR/fullchain.pem"
+            chmod 640 "$CERT_DIR/privkey.pem"
+            echo "✓ Certificates copied"
+            
+            # Install renewal hook
+            HOOK_PATH="/etc/letsencrypt/renewal-hooks/post/tinychat.sh"
+            mkdir -p "$(dirname "$HOOK_PATH")"
+            cat > "$HOOK_PATH" << HOOK
+#!/bin/bash
+set -e
+ARCHIVE_DIR="$CERT_ARCHIVE/$CERT_DOMAIN"
+DEST_DIR="$CERT_DIR"
+SERVICE_USER="$TINYCHAT_USER"
+
+# Find latest certs
+FULL=\$(ls -1 "\$ARCHIVE_DIR"/fullchain*.pem 2>/dev/null | sort -V | tail -n1)
+KEY=\$(ls -1 "\$ARCHIVE_DIR"/privkey*.pem 2>/dev/null | sort -V | tail -n1)
+
+if [ -n "\$FULL" ] && [ -n "\$KEY" ]; then
+    cp -f "\$FULL" "\$DEST_DIR/fullchain.pem"
+    cp -f "\$KEY" "\$DEST_DIR/privkey.pem"
+    chown "\$SERVICE_USER:\$SERVICE_USER" "\$DEST_DIR"/*.pem
+    chmod 644 "\$DEST_DIR/fullchain.pem"
+    chmod 640 "\$DEST_DIR/privkey.pem"
+    
+    # Restart service
+    if command -v supervisorctl >/dev/null 2>&1; then
+        supervisorctl restart tinychat
+    fi
+    
+    logger "TinyChat: certificates renewed and service restarted"
+fi
+HOOK
+            chmod +x "$HOOK_PATH"
+            echo "✓ Certbot renewal hook installed"
+        fi
+    fi
+else
+    echo "⚠ No Let's Encrypt certificates found"
+    echo "  Run: sudo certbot certonly --standalone -d your-domain.com"
+    echo "  Then run this setup script again"
+fi
+
+# 10. Start the service
+echo ""
 echo "Starting TinyChat service..."
-sudo supervisorctl start tinychat
+supervisorctl start tinychat || supervisorctl restart tinychat
 
-# 10. Check status
+# 11. Check status
+sleep 2
 echo ""
 echo "=== Setup Complete! ==="
 echo ""
 echo "✓ Service user created: $TINYCHAT_USER"
-echo "✓ Project cloned to: $TINYCHAT_HOME/chat_server"
+echo "✓ Project installed to: $TINYCHAT_HOME/chat_server"
 echo "✓ Virtual environment created"
 echo "✓ Python packages installed"
 echo "✓ Supervisor configured"
-echo "✓ Certbot hook installed"
+echo "✓ Certificates directory: $CERT_DIR"
+echo ""
+echo "=== Service Status ==="
+supervisorctl status tinychat
 echo ""
 echo "=== Next Steps ==="
 echo "1. Edit $TINYCHAT_HOME/chat_server/.env and change MOD_PASSWORD"
-echo "2. Check status: sudo supervisorctl status tinychat"
+echo "2. If no SSL certs, run: sudo certbot certonly --standalone -d your-domain.com"
 echo "3. View logs: sudo tail -f $TINYCHAT_HOME/chat_server/tinychat.log"
-echo "4. Start/stop: sudo supervisorctl start/stop/restart tinychat"
+echo "4. Manage service: sudo supervisorctl start/stop/restart tinychat"
 echo ""
 echo "Server will auto-restart on reboot and after Certbot renewal."
