@@ -22,6 +22,9 @@ RUN pip install --upgrade pip setuptools wheel && \
 # Copy application sources (from parent directory context)
 COPY ../main.py ./
 
+# Create certificates directory with appropriate permissions
+RUN mkdir -p /certs && chmod 755 /certs
+
 # Create a non-root user for running the app
 RUN useradd --create-home appuser && chown -R appuser:appuser /app
 USER appuser
