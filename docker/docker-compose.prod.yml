@@ -32,8 +32,10 @@ services:
       - "8765:8765"
     
     # Mount Certbot certificate files (production)
+    # NOTE: Certbot symlinks are in /live/, but actual files are in /archive/
+    # We mount /archive/ to avoid symlink resolution issues
     volumes:
-      - /etc/letsencrypt/live/krassus.ddns.net-0001:/certs:ro
+      - /etc/letsencrypt/archive/krassus.ddns.net-0001:/certs:ro
     
     # Restart policy for production (auto-restart on failure or reboot)
     restart: always

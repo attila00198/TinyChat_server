@@ -33,10 +33,11 @@ services:
     ports:
       - "8000:8765"
     
-    # Optional: Mount certificate files for TLS (uncomment to enable)
+    # Mount certificate files for TLS
+    # NOTE: Certbot symlinks are in /live/, but actual files are in /archive/
+    # We mount /archive/ to avoid symlink resolution issues
     volumes:
-    - /etc/letsencrypt/live/krassus.ddns.net-0001:/certs:ro
-    #   # Example with Certbot: /etc/letsencrypt/live/yourdomain.com:/certs:ro
+      - /etc/letsencrypt/archive/krassus.ddns.net-0001:/certs:ro
     
     # Restart policy
     restart: unless-stopped
