@@ -3,3 +3,4 @@ python-dotenv
 
 # Optional: testing tools
 pytest>=7.0
+cryptography>=40.0

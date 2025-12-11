@@ -22,8 +22,5 @@ Thumbs.db
 # Node modules (if client code added)
 node_modules/
 
-# Docker stuff
-DOCKER_README.md
-docker-compose.yml
-Dockerfile
-.dockerignore
+# Docker stuff (now in docker/ folder)
+docker/test_docker_client.py

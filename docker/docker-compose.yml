@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  tinychat:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    
+    image: tinychat-server:latest
+    
+    container_name: tinychat-server
+    
+    # Server configuration via environment variables
+    environment:
+      # Network settings
+      - HOST=0.0.0.0
+      - PORT=8765
+      
+      # Moderator password (change this!)
+      - MOD_PASSWORD=admin123
+      
+      # SSL/TLS configuration (set USE_SSL=false to disable)
+      - USE_SSL=true
+      - SSL_CERT_PATH=/certs/fullchain.pem
+      - SSL_KEY_PATH=/certs/privkey.pem
+    
+    # Port mapping: host:container
+    ports:
+      - "8000:8765"
+    
+    # Optional: Mount certificate files for TLS (uncomment to enable)
+    volumes:
+    - /etc/letsencrypt/live/krassus.ddns.net-0001:/certs:ro
+    #   # Example with Certbot: /etc/letsencrypt/live/yourdomain.com:/certs:ro
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Optional: healthcheck
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8765), timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    # Optional: logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
