@@ -5,30 +5,17 @@ The TinyChat WebSocket server now supports SSL/TLS encryption (secure WebSocket 
 
 ## Quick Start
 
-### 1. Generate Self-Signed Certificates (Testing Only)
-
-For development and testing, generate a self-signed certificate:
-
-```powershell
-pip install cryptography
-python generate_certs.py
-```
-
-This creates:
-- `./certs/server.crt` - Public certificate
-- `./certs/server.key` - Private key
-
-### 2. Enable SSL in Configuration
+### 1. Enable SSL in Configuration
 
 Create or update `.env`:
 
 ```
 USE_SSL=true
-SSL_CERT_PATH=./certs/server.crt
-SSL_KEY_PATH=./certs/server.key
+SSL_CERT_PATH=./certs/fulchain.pem
+SSL_KEY_PATH=./certs/
 ```
 
-### 3. Run the Server
+### 2. Run the Server
 
 ```powershell
 python main.py

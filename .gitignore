@@ -1,19 +1,18 @@
 .venv
 tests
-__pycache__
 main.old.py
-.env
 scripts/
+certs/
 
 # Local env and caches
 .env
 *.pyc
 .pytest_cache/
+__pycache__
 
 # Editor/IDE
 .vscode/
 .idea/
-certs
 
 # Logs and OS files
 *.log
@@ -22,6 +21,3 @@ Thumbs.db
 
 # Node modules (if client code added)
 node_modules/
-
-# Docker stuff (now in docker/ folder)
-docker/test_docker_client.py
